@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sound Recorder</title>
+    <link rel="stylesheet" href="src/style.css" />
+  </head>
+  <body>
+    <link
+      href="https://fonts.cdnfonts.com/css/scientific-calculator-lcd"
+      rel="stylesheet"
+    />
+    <div id="audio-recorder">
+      <div id="audio-recorder-display">
+        <div id="volume-bars"></div>
+      </div>
+
+      <div class="buttons">
+        <button id="record" class="metalbtn"></button>
+      </div>
+    </div>
+    <script>
+      const VOLUME_BAR = "▮";
+
+      const $ = document.querySelector.bind(document),
+        $$ = document.querySelectorAll.bind(document);
+
+      let stream;
+      let mediaRecorder;
+
+      let chunks = [];
+
+      $("#record").onclick = ({ target }) => {
+        if (target.classList.contains("active")) {
+          target.classList.remove("active");
+          stopr();
+        } else {
+          target.classList.add("active");
+          startr();
+        }
+      };
+
+      function stopr() {
+        mediaRecorder.stop();
+      }
+
+      function startr() {
+        console.log("starting...");
+        $("#volume-bars").innerHTML = "Loading";
+
+        navigator.getUserMedia(
+          {
+            audio: true,
+          },
+          (_stream) => {
+            stream = _stream;
+            $("#volume-bars").innerHTML = "";
+            let audioContext = new AudioContext(),
+              analyser = audioContext.createAnalyser(),
+              microphone = audioContext.createMediaStreamSource(stream),
+              javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+
+            analyser.smoothingTimeConstant = 0.8;
+            analyser.fftSize = 1024;
+
+            microphone.connect(analyser);
+            analyser.connect(javascriptNode);
+            javascriptNode.connect(audioContext.destination);
+
+            javascriptNode.onaudioprocess = function () {
+              console.log("VBAR");
+              volumeBars(analyser);
+            };
+
+            const _mediaRecorder = new MediaRecorder(stream);
+
+            mediaRecorder = _mediaRecorder;
+
+            mediaRecorder.start();
+
+            mediaRecorder.ondataavailable = (e) => {
+              chunks.push(e.data);
+            };
+
+            mediaRecorder.onstop = () => {
+              const blob = new Blob(chunks, {
+                type: "audio/mpeg",
+              });
+              chunks = [];
+
+              downloadMediaBlob(blob);
+
+              javascriptNode.disconnect();
+              $("#volume-bars").innerHTML = "";
+              stream.getTracks().forEach((track) => track.stop());
+            };
+          },
+          () => {}
+        );
+      }
+
+      function volumeBars(analyser) {
+        var array = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(array);
+        var values = 0;
+
+        var length = array.length;
+        for (var i = 0; i < length; i++) {
+          values += array[i];
+        }
+
+        var average = values / length;
+
+        $("#volume-bars").innerHTML = VOLUME_BAR.repeat(
+          Math.min(Math.ceil(average / 8), 9)
+        );
+      }
+
+      function downloadMediaBlob(blob) {
+        const recordedMediaURL = URL.createObjectURL(blob);
+
+        const downloadButton = document.createElement("a");
+
+        downloadButton.download = "audio";
+
+        downloadButton.href = recordedMediaURL;
+
+        downloadButton.click();
+      }
+    </script>
+  </body>
+</html>
